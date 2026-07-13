@@ -1,0 +1,11 @@
+{
+    "name": "Magazzino",
+    "alias": "magazzino",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Magazzino\\Providers\\MagazzinoServiceProvider"
+    ],
+    "files": []
+}

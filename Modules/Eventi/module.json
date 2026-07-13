@@ -1,0 +1,11 @@
+{
+    "name": "Eventi",
+    "alias": "eventi",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Eventi\\Providers\\EventiServiceProvider"
+    ],
+    "files": []
+}

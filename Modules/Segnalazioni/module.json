@@ -1,0 +1,11 @@
+{
+    "name": "Segnalazioni",
+    "alias": "segnalazioni",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Segnalazioni\\Providers\\SegnalazioniServiceProvider"
+    ],
+    "files": []
+}

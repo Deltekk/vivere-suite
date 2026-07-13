@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/eventi",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Eventi\\": "app/",
+            "Modules\\Eventi\\Database\\Factories\\": "database/factories/",
+            "Modules\\Eventi\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Eventi\\Tests\\": "tests/"
+        }
+    }
+}

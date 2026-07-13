@@ -1,0 +1,11 @@
+{
+    "name": "Drive",
+    "alias": "drive",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Drive\\Providers\\DriveServiceProvider"
+    ],
+    "files": []
+}

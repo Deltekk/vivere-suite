@@ -1,0 +1,11 @@
+{
+    "name": "OggettiSmarriti",
+    "alias": "oggettismarriti",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\OggettiSmarriti\\Providers\\OggettiSmarritiServiceProvider"
+    ],
+    "files": []
+}

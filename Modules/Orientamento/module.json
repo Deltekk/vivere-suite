@@ -1,0 +1,11 @@
+{
+    "name": "Orientamento",
+    "alias": "orientamento",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Orientamento\\Providers\\OrientamentoServiceProvider"
+    ],
+    "files": []
+}

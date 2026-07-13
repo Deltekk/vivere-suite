@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/kaffettino",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Kaffettino\\": "app/",
+            "Modules\\Kaffettino\\Database\\Factories\\": "database/factories/",
+            "Modules\\Kaffettino\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Kaffettino\\Tests\\": "tests/"
+        }
+    }
+}

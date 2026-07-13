@@ -1,0 +1,11 @@
+{
+    "name": "Filigrana",
+    "alias": "filigrana",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Filigrana\\Providers\\FiligranaServiceProvider"
+    ],
+    "files": []
+}

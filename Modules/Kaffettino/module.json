@@ -1,0 +1,11 @@
+{
+    "name": "Kaffettino",
+    "alias": "kaffettino",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Kaffettino\\Providers\\KaffettinoServiceProvider"
+    ],
+    "files": []
+}

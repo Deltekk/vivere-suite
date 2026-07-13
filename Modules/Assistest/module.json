@@ -1,0 +1,11 @@
+{
+    "name": "Assistest",
+    "alias": "assistest",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Assistest\\Providers\\AssistestServiceProvider"
+    ],
+    "files": []
+}

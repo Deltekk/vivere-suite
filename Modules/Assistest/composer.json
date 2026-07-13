@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/assistest",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Assistest\\": "app/",
+            "Modules\\Assistest\\Database\\Factories\\": "database/factories/",
+            "Modules\\Assistest\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Assistest\\Tests\\": "tests/"
+        }
+    }
+}

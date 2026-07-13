@@ -1,0 +1,11 @@
+{
+    "name": "ProblemiTecnici",
+    "alias": "problemitecnici",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ProblemiTecnici\\Providers\\ProblemiTecniciServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,11 @@
+{
+    "name": "QR",
+    "alias": "qr",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\QR\\Providers\\QRServiceProvider"
+    ],
+    "files": []
+}

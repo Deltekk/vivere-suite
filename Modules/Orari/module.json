@@ -1,0 +1,11 @@
+{
+    "name": "Orari",
+    "alias": "orari",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Orari\\Providers\\OrariServiceProvider"
+    ],
+    "files": []
+}

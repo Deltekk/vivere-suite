@@ -1,0 +1,11 @@
+{
+    "name": "AuleLibere",
+    "alias": "aulelibere",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\AuleLibere\\Providers\\AuleLibereServiceProvider"
+    ],
+    "files": []
+}
