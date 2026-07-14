@@ -1,0 +1,276 @@
+// Use DBML to define your database structure
+// Docs: https://dbml.dbdiagram.io/docs
+
+enum course_year_enum{
+  "S4"
+  "S5"
+  "T1"
+  "T2"
+  "T3"
+  "TFC"
+  "M1"
+  "M2"
+  "MFC"
+  "Laureando"
+  "PTT-1-1"
+  "PTT-1-2"
+  "PTT-2-1"
+  "PTT-2-2"
+  "PTT-3-1"
+  "PTT-3-2"
+  "PTM-1-1"
+  "PTM-1-2"
+  "PTM-2-1"
+  "PTM-2-2"
+}
+
+enum role_enum{
+  "Student"
+  "Staff"
+  "Admin"
+  "SuperAdmin"
+}
+
+enum user_status_enum{
+  "Pending"
+  "Active"
+  "Banned"  
+  "To_Confirm" // Usato per studenti che cambiano l'anno e per inciso anche quelli delle superiori
+}
+
+Table core.users {
+  id bigint [primary key, not null, increment]
+  name text [not null]
+  surname text [not null]
+  username text [unique, not null] // In formato unipa
+  birthday date [not null, note: 'Check età >= 16 in fase di registrazione (applicativo)']
+  course_id bigint [null, note: 'NULL per gli studenti delle superiori'] 
+  course_year course_year_enum [not null]
+  phone_number text [not null]
+  email text [unique, not null]         // Formato unipa per tutti tranne che per superiori S4 ed S5
+  telegram_tag text [unique, null]      
+  instagram_tag text [unique, null]     
+  school_id bigint [null]               // Obbligatorio per gli staffer, opzionale per gli studenti e per chi si vuole registrare ad assistest
+  password text [not null]
+  role role_enum [not null, default: 'Student']
+  status user_status_enum [not null, default: 'Pending']  
+  email_verified_at timestamp [null]  
+
+  // Privacy
+  privacy_accepted_at timestamp [not null, note: 'Accountability GDPR: quando ha accettato informativa in registrazione']
+  terms_version varchar [not null, note: 'Quale versione informativa ha accettato — se cambia, si richiede']
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    status
+    course_id
+    school_id
+  }
+
+}
+
+Table core.staff_profiles {
+  id bigint [primary key, not null, increment]
+  user_id bigint [not null, unique]
+
+  tax_code text [not null, unique] // Codice Fiscale
+  birth_city text [not null]        
+  birth_province text [not null]    
+  birth_country text [not null]     
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+Table core.courses{
+  id bigint [primary key, not null, increment]
+  name text [unique, not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+Table core.academic_roles {
+  id bigint [pk, not null, increment]
+  name varchar [unique, not null, note: 'Seed iniziale: CDD, CCS, CDA, CDA-ERSU, CNSU, CSU']   // Non usiamo un enum perché devono essere customizzabili
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+Table core.user_academic_roles {
+  id bigint [pk, not null, increment]
+  user_id bigint [not null]
+  academic_role_id bigint [not null]
+  started_at date [not null]
+  expires_at date [not null]        // data di decadenza  
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (user_id, academic_role_id, started_at, expires_at) [unique]
+    expires_at
+  }
+}
+
+Table core.schools{
+  id bigint [primary key, not null, increment]
+  name text [unique, not null]
+  lat "double precision" [null]
+  lon "double precision" [null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+Table core.admin_courses {
+  id bigint [pk, increment, not null]
+  user_id bigint [not null]
+  course_id bigint [not null]
+  created_at timestamp [not null]
+
+  indexes {
+    (user_id, course_id) [unique]
+  }
+}
+
+// Storico ban, mai cancellato. Il campo email_pattern serve al requisito:
+// "se una persona bannata si rifà l'account con la seconda mail istituzionale,
+// il sistema blocca la richiesta".
+Table core.bans {
+  id bigint [pk, increment, not null]
+  user_id bigint [not null]
+  banned_by bigint [not null, note: 'Admin che ha eseguito il ban']
+  reason text [not null, note: 'Motivazione obbligatoria: viene inviata via mail']
+  email_pattern varchar [not null, note: 'Pattern normalizzato es. "marioluigi.rossi" — il match in registrazione va gestito come warning in coda revisione, NON rifiuto automatico (rischio omonimi)']
+  created_at timestamp [not null]
+
+  indexes {
+    email_pattern
+  }
+}
+
+// ---------- AULETTE ----------
+// Termine di dominio intoccabile: eccezione documentata alla convenzione inglese.
+
+Table core.aulette {
+  id bigint [pk, increment, not null]
+  name varchar [unique, not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+// Gestori auletta: N:N con storico (assigned/removed → mail chiavi, req. HR)
+Table core.auletta_managers {
+  id bigint [pk, increment, not null]
+  user_id bigint [not null, note: 'Solo utenti non-Student (regola applicativa)']
+  auletta_id bigint [not null]
+  assigned_at timestamp [not null]
+  removed_at timestamp [null, note: 'NULL = gestione attiva. Alla rimozione: mail restituzione chiavi']
+
+  indexes {
+    (user_id, auletta_id, assigned_at) [unique]
+  }
+}
+
+// ---------- NOTIFICHE ----------
+// Nota implementativa: Laravel ha già la tabella `notifications` (canale
+// database) con payload JSON. Questo modello concettuale mappa quel
+// meccanismo + gli allegati richiesti dal documento.
+
+Table core.notifications {
+  id bigint [pk, increment, not null]
+  user_id bigint [not null]
+  title varchar [not null]
+  body text [not null]
+  read_at timestamp [null]
+  created_at timestamp [not null]
+
+  indexes {
+    (user_id, read_at) // "le mie notifiche non lette"
+  }
+}
+
+Table core.notification_attachments {
+  id bigint [pk, increment, not null]
+  notification_id bigint [not null]
+  file_path varchar [not null, note: 'Path su MinIO/S3']
+  created_at timestamp [not null]
+}
+
+// Preferenze email per servizio: "si potrà scegliere se ricevere le email
+// e per quali servizi, modificabile in qualsiasi momento"
+Table core.email_preferences {
+  id bigint [pk, increment, not null]
+  user_id bigint [not null]
+  service varchar [not null, note: 'Nome modulo: drive, kaffettino, eventi...']
+  enabled boolean [not null, default: true]
+
+  indexes {
+    (user_id, service) [unique]
+  }
+}
+
+// ---------- PROFESSORI (anti-accesso non autorizzato) ----------
+
+// Popolata dal job di scraping del sito di ateneo (isolato: se fallisce non blocca nulla).
+// Il match con gli utenti in Pending è calcolato a query time sul nome
+// normalizzato e mostrato come WARNING agli staffer, mai blocco automatico.
+Table core.professors {
+  id bigint [pk, increment, not null]
+  full_name varchar [not null]
+  normalized_name varchar [not null, note: 'lowercase, senza spazi/accenti — per il confronto']
+  scraped_at timestamp [not null]
+
+  indexes {
+    normalized_name
+  }
+}
+
+Table core.changelogs {
+  id bigint [pk, increment, not null]
+  service varchar [not null, note: 'Modulo di riferimento: hr, drive, kaffettino... — mostrato al primo login utile su quella piattaforma']
+  title varchar [not null]
+  body text [not null]
+  published_at timestamp [not null, note: 'Visibile agli utenti solo da questa data — permette di preparare la entry prima del rilascio']
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (service, published_at)  // "changelog non visti del modulo X" — query a ogni login
+  }
+}
+
+// Pivot: traccia chi ha visto cosa. Riga presente = visto.
+Table core.changelog_user {
+  id bigint [pk, increment, not null]
+  changelog_id bigint [not null]
+  user_id bigint [not null]
+  seen_at timestamp [not null]
+
+  indexes {
+    (changelog_id, user_id) [unique]  // un utente vede una entry una volta sola
+  }
+}
+
+Ref: core.changelog_user.changelog_id > core.changelogs.id
+Ref: core.changelog_user.user_id > core.users.id
+
+Ref: core.users.course_id > core.courses.id
+Ref: core.users.school_id > core.schools.id
+
+Ref: core.admin_courses.user_id > core.users.id
+Ref: core.admin_courses.course_id > core.courses.id
+
+Ref: core.user_academic_roles.user_id > core.users.id
+Ref: core.user_academic_roles.academic_role_id > core.academic_roles.id
+
+Ref: core.bans.user_id > core.users.id
+Ref: core.bans.banned_by > core.users.id
+
+Ref: core.auletta_managers.user_id > core.users.id
+Ref: core.auletta_managers.auletta_id > core.aulette.id
+
+Ref: core.notifications.user_id > core.users.id
+Ref: core.notification_attachments.notification_id > core.notifications.id
+
+Ref: core.email_preferences.user_id > core.users.id
+Ref: core.staff_profiles.user_id - core.users.id
