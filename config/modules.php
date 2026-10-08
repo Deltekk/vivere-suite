@@ -35,19 +35,16 @@ return [
     |
     */
     'stubs' => [
-        'enabled' => false,
-        'path' => base_path('vendor/nwidart/laravel-modules/src/Commands/stubs'),
+        // Suite Vivere: usiamo gli stub personalizzati in stubs/nwidart-stubs (rotte senza Sanctum
+        // e senza controller di esempio). Non generiamo view, asset, vite.config.js e package.json
+        // per modulo: la UI è un panel Filament e il build frontend è unico (vite.config.js in root).
+        'enabled' => true,
+        'path' => base_path('stubs/nwidart-stubs'),
         'files' => [
             'routes/web' => 'routes/web.php',
             'routes/api' => 'routes/api.php',
-            'views/index' => 'resources/views/index.blade.php',
-            'views/master' => 'resources/views/components/layouts/master.blade.php',
             'scaffold/config' => 'config/config.php',
             'composer' => 'composer.json',
-            'assets/js/app' => 'resources/assets/js/app.js',
-            'assets/sass/app' => 'resources/assets/sass/app.scss',
-            'vite' => 'vite.config.js',
-            'package' => 'package.json',
         ],
         'replacements' => [
             /**
@@ -172,7 +169,7 @@ return [
             'traits' => ['path' => 'app/Traits', 'generate' => false],
 
             // app/Http/
-            'controller' => ['path' => 'app/Http/Controllers', 'generate' => true],
+            'controller' => ['path' => 'app/Http/Controllers', 'generate' => false],
             'filter' => ['path' => 'app/Http/Middleware', 'generate' => false],
             'request' => ['path' => 'app/Http/Requests', 'generate' => false],
 
@@ -188,7 +185,7 @@ return [
             'lang' => ['path' => 'lang', 'generate' => false],
 
             // resource/
-            'assets' => ['path' => 'resources/assets', 'generate' => true],
+            'assets' => ['path' => 'resources/assets', 'generate' => false],
             'component-view' => ['path' => 'resources/views/components', 'generate' => false],
             'views' => ['path' => 'resources/views', 'generate' => true],
             'inertia' => ['path' => 'resources/js/Pages', 'generate' => false],
@@ -274,10 +271,10 @@ return [
     |
     */
     'composer' => [
-        'vendor' => env('MODULE_VENDOR', 'nwidart'),
+        'vendor' => env('MODULE_VENDOR', 'vivere'),
         'author' => [
-            'name' => env('MODULE_AUTHOR_NAME', 'Nicolas Widart'),
-            'email' => env('MODULE_AUTHOR_EMAIL', 'n.widart@gmail.com'),
+            'name' => env('MODULE_AUTHOR_NAME', 'Vivere Ingegneria'),
+            'email' => env('MODULE_AUTHOR_EMAIL', ''),
         ],
         'composer-output' => false,
     ],

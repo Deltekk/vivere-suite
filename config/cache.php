@@ -1,5 +1,6 @@
 <?php
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 
 return [
@@ -131,6 +132,14 @@ return [
     |
     */
 
-    'serializable_classes' => false,
+    // Suite Vivere: si ammettono SOLO le classi data di Carbon (la loro forma serializzata contiene
+    // solo stringhe e numeri). Servono a Filament, che salva in cache la scadenza dei codici 2FA
+    // via email: con "false" la data tornerebbe come __PHP_Incomplete_Class e ogni codice
+    // risulterebbe non valido. Non aggiungere classi qui senza un motivo preciso.
+    'serializable_classes' => [
+        Carbon\Carbon::class,
+        CarbonImmutable::class,
+        Illuminate\Support\Carbon::class,
+    ],
 
 ];

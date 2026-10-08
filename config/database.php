@@ -95,7 +95,14 @@ return [
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => 'public',
+            // Schemi della suite: public (tabelle tecniche di Laravel), core (entità condivise) e uno
+            // schema per ogni modulo con tabelle proprie. Nel codice le tabelle si qualificano SEMPRE
+            // con lo schema ("core.users"); questa lista serve a comandi come migrate:fresh e db:wipe
+            // per vedere tutti gli schemi. Uno schema non ancora creato viene ignorato da Postgres.
+            'search_path' => env('DB_SEARCH_PATH', 'public,core,kaffettino'),
+            // L'applicazione lavora in UTC (config/app.php) e le colonne sono timestamptz:
+            // impostare la sessione in UTC evita che Postgres interpreti le date con un altro fuso.
+            'timezone' => 'UTC',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 

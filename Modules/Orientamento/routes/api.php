@@ -1,8 +1,9 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Modules\Orientamento\Http\Controllers\OrientamentoController;
-
-Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
-    Route::apiResource('orientamentos', OrientamentoController::class)->names('orientamento');
-});
+/*
+| API del modulo (prefisso /api, middleware "api").
+|
+| Da definire quando il modulo verrà sviluppato. Sanctum non fa parte della suite:
+| i dispositivi embedded si autenticano con un token di dispositivo verificato da un
+| middleware dedicato (vedi CLAUDE.md, sezione "API per dispositivi embedded").
+*/

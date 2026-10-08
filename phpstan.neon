@@ -9,5 +9,8 @@ parameters:
         - config/
         - database/
         - routes/
+        # Moduli in sviluppo: aggiungere qui ogni modulo quando si inizia a lavorarci
+        - Modules/HumanResources/app/
+        - Modules/Kaffettino/app/
 
     level: 7

@@ -1,21 +1,24 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/blank-livewire-starter-kit",
+    "name": "vivere/suite",
     "type": "project",
-    "description": "The official Laravel starter kit for Livewire.",
+    "description": "Suite di applicativi dell'associazione Vivere (UNIPA): monolite modulare Laravel.",
     "keywords": [
         "laravel",
-        "framework"
+        "filament",
+        "vivere",
+        "unipa"
     ],
-    "license": "MIT",
+    "license": "proprietary",
     "require": {
-        "php": "^8.3",
+        "php": "^8.5",
+        "filament/filament": "^5.10",
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
-        "livewire/blaze": "^1.0",
-        "livewire/livewire": "^4.1",
-        "nwidart/laravel-modules": "*",
-        "wikimedia/composer-merge-plugin": "*"
+        "livewire/livewire": "^4.4.7",
+        "nwidart/laravel-modules": "^13.0",
+        "spatie/laravel-activitylog": "^5.1",
+        "wikimedia/composer-merge-plugin": "^2.1"
     },
     "require-dev": {
         "fakerphp/faker": "^1.24",
@@ -45,13 +48,21 @@
         "setup": [
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
-            "@php artisan key:generate",
-            "@php artisan migrate --force",
+            "@php -r \"exit(preg_match('/^APP_KEY=.+/m', file_get_contents('.env')) ? 1 : 0);\" && php artisan key:generate --ansi || true",
+            "@services",
+            "@php artisan migrate --seed --force",
             "npm install",
             "npm run build"
         ],
+        "services": [
+            "docker compose up -d --wait pgsql redis mailpit"
+        ],
+        "services:stop": [
+            "docker compose stop"
+        ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
+            "@services",
             "@php artisan dev"
         ],
         "lint": [
@@ -65,7 +76,7 @@
             "@test"
         ],
         "types:check": [
-            "phpstan analyse"
+            "phpstan analyse --memory-limit=1G"
         ],
         "test": [
             "@php artisan config:clear --ansi",
@@ -75,18 +86,11 @@
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
-            "@php artisan package:discover --ansi"
+            "@php artisan package:discover --ansi",
+            "@php artisan filament:upgrade"
         ],
         "post-update-cmd": [
-            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"          
-        ],
-        "post-root-package-install": [
-            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
-        ],
-        "post-create-project-cmd": [
-            "@php artisan key:generate --ansi",
-            "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
-            "@php artisan migrate --graceful --ansi"
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
         ],
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
@@ -97,10 +101,10 @@
             "dont-discover": []
         },
         "merge-plugin": {
-        "include": [
-            "Modules/*/composer.json"
-        ]
-    }
+            "include": [
+                "Modules/*/composer.json"
+            ]
+        }
     },
     "config": {
         "optimize-autoloader": true,
@@ -110,8 +114,17 @@
             "pestphp/pest-plugin": true,
             "php-http/discovery": true,
             "wikimedia/composer-merge-plugin": true
-        }
+        },
+        "platform-check": true
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "scripts-descriptions": {
+        "setup": "Prima installazione: dipendenze, .env, servizi Docker, migration+seed, build frontend",
+        "services": "Avvia Postgres, Redis e Mailpit in Docker e aspetta che siano pronti",
+        "services:stop": "Ferma i container Docker della suite",
+        "dev": "Avvia servizi Docker + server, queue, scheduler, log e Vite (Ctrl+C per fermare)",
+        "lint": "Sistema lo stile del codice con Pint",
+        "test": "Lint, analisi statica e test"
+    }
 }

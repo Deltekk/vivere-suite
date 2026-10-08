@@ -22,3 +22,8 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Asset pubblicati da "php artisan filament:upgrade" (rigenerati a ogni composer install)
+/public/css/filament
+/public/js/filament
+/public/fonts/filament

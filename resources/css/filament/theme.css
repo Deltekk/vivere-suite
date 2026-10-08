@@ -1,0 +1,11 @@
+/*
+ * Tema unico di tutti i panel Filament della suite (vedi VivereSuitePanelProvider::viteTheme).
+ * Personalizzazioni grafiche comuni (colori extra, componenti) vanno qui e valgono ovunque.
+ */
+@import '../../../vendor/filament/filament/resources/css/theme.css';
+
+/* File da cui Tailwind ricava le classi usate: codice Filament del core e di tutti i moduli */
+@source '../../../app/Filament/**/*';
+@source '../../../resources/views/filament/**/*';
+@source '../../../Modules/*/app/Filament/**/*';
+@source '../../../Modules/*/resources/views/**/*';

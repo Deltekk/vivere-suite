@@ -1,264 +1,533 @@
-// Use DBML to define your database structure
-// Docs: https://dbml.dbdiagram.io/docs
+//  Use DBML to define your database structure
+//  Docs: https://dbml.dbdiagram.io/docs
 
-enum course_year_enum{
-  "S4"
-  "S5"
-  "T1"
-  "T2"
-  "T3"
-  "TFC"
-  "M1"
-  "M2"
-  "MFC"
-  "Laureando"
-  "PTT-1-1"
-  "PTT-1-2"
-  "PTT-2-1"
-  "PTT-2-2"
-  "PTT-3-1"
-  "PTT-3-2"
-  "PTM-1-1"
-  "PTM-1-2"
-  "PTM-2-1"
-  "PTM-2-2"
+//  Convenzioni utilizzate:
+//  	- Tutti i nomi in inglese tranne i termini di dominio intraducibili (auletta/aulette)
+//  	- Rispettare i vincoli GDPR (minimizzazione: i dati non indispensabili sono facoltativi)
+//  	- Rispettare i vincoli di progetto specificati in Documentation.pdf
+//  	- Schemi Postgres: public = tabelle tecniche di Laravel (cache, jobs, sessions, ...),
+//  	  core = entità usate da più moduli, <modulo> = tabelle usate da un solo modulo
+//  	- Chiavi primarie uuid (UUIDv7 generati da Laravel, ordinati nel tempo)
+//  	- Le tabelle pivot pure non hanno id: chiave primaria composta dalle due FK
+//  	- Stringhe sempre text (in Postgres text e varchar hanno le stesse prestazioni)
+//  	- Date e ore sempre timestamptz, salvate in UTC
+//  	- Soldi sempre in centesimi interi (bigint/integer), mai float
+//  	- Gli enum diventano varchar + CHECK (comportamento di Laravel su Postgres)
+//  	- Le foreign key sono gli ultimi dati di una tabella, prima solo dei timestamptz
+//  	- Niente cancellazioni fisiche dove serve lo storico: flag/timestamp (delisted_at, removed_at, ...)
+//	Todo: Da aggiungere idea delle gare tra istituti in assistest
+
+Project vivere_suite {
+  database_type: 'PostgreSQL'
+  Note: "Suite di applicativi per l'associazione Vivere Ateneo"
 }
 
-enum role_enum{
-  "Student"
-  "Staff"
-  "Admin"
-  "SuperAdmin"
+//  ----- ENUM -----
+
+//	Enumeratore che identifica l'anno di frequenza di uno studente, sono considerati anche part-time, laureandi ed FC
+enum course_year_enum {
+	"S4"
+	"S5"
+	"T1"
+	"T2"
+	"T3"
+	"TFC"
+	"M1"
+	"M2"
+	"MFC"
+	"Laureando"
+	"PTT-1-1"
+	"PTT-1-2"
+	"PTT-2-1"
+	"PTT-2-2"
+	"PTT-3-1"
+	"PTT-3-2"
+	"PTM-1-1"
+	"PTM-1-2"
+	"PTM-2-1"
+	"PTM-2-2"
 }
 
-enum user_status_enum{
-  "Pending"
-  "Active"
-  "Banned"  
-  "To_Confirm" // Usato per studenti che cambiano l'anno e per inciso anche quelli delle superiori
+//  Enumeratore che identifica il ruolo all'interno della suite di una persona (gerarchico), nello specifico:
+// 		- Uno studente comune, non ha poteri
+// 		- Lo staffer accetta le registrazioni ed ha poteri di gestione su alcune piattaforme
+// 		- L'admin può bannare ed ha permessi di amministrazione nelle piattaforme
+// 		- Il super admin è un admin non revocabile che può vedere anche i log
+enum role_enum {
+	"Student"
+	"Staff"
+	"Admin"
+	"SuperAdmin"
 }
 
+//  Enumeratore che identifica lo status dell'account di una persona, nello specifico:
+// 		- Pending: l'utente si è appena registrato ed è in attesa dell'accettazione da parte di uno staffer.
+// 		  Ci finisce anche chi somiglia a un professore o a un utente bannato: agli staffer compare un warning
+// 		- Active: l'utente è stato confermato dallo staff
+// 		- Banned: l'utente è stato bannato per comportamenti scorretti (vedere tabella core.bans)
+// 		- To_Confirm: ad ogni nuovo anno accademico, esclusi i bannati, tutti scattano all'anno successivo;
+// 		  chi richiede una verifica manuale (es. superiori) resta qui finché un admin non conferma
+enum user_status_enum {
+	"Pending"
+	"Active"
+	"Banned"
+	"To_Confirm"
+}
+
+//	Genere dichiarato (facoltativo): serve solo a declinare i testi della piattaforma (M, F o forma neutra)
+enum user_gender_enum {
+	"Male"
+	"Female"
+	"Other"
+}
+
+//	Stato delle chiavi di un'auletta per un gestore:
+//		nomina -> Handing_Over (mail "vieni a prendere le chiavi") -> Handed_Over
+//		rimozione -> Requested (mail "restituisci le chiavi") -> Returned
+enum key_state_enum {
+	"Handing_Over"
+	"Handed_Over"
+	"Requested"
+	"Returned"
+}
+
+//	Tipo di dispositivo embedded (core.devices): se ne aggiunge uno per ogni modulo che ne ha
+enum device_type_enum {
+	"KaffettinoReader"  // ESP32 con lettore NFC, tastierino e display nelle aulette (Kaffettino)
+}
+
+// ---------- UTENTI ----------
+
+// La tabella users contiene tutti i dati in comune tra gli studenti e gli staffer
 Table core.users {
-  id bigint [primary key, not null, increment]
-  name text [not null]
-  surname text [not null]
-  username text [unique, not null] // In formato unipa
-  birthday date [not null, note: 'Check età >= 16 in fase di registrazione (applicativo)']
-  course_id bigint [null, note: 'NULL per gli studenti delle superiori'] 
-  course_year course_year_enum [not null]
-  phone_number text [not null]
-  email text [unique, not null]         // Formato unipa per tutti tranne che per superiori S4 ed S5
-  telegram_tag text [unique, null]      
-  instagram_tag text [unique, null]     
-  school_id bigint [null]               // Obbligatorio per gli staffer, opzionale per gli studenti e per chi si vuole registrare ad assistest
-  password text [not null]
-  role role_enum [not null, default: 'Student']
-  status user_status_enum [not null, default: 'Pending']  
-  email_verified_at timestamp [null]  
+	id uuid [primary key, not null]
 
-  // Privacy
-  privacy_accepted_at timestamp [not null, note: 'Accountability GDPR: quando ha accettato informativa in registrazione']
-  terms_version varchar [not null, note: 'Quale versione informativa ha accettato — se cambia, si richiede']
+	name text [not null]
+	surname text [not null]
+	username text [not null, note: 'Unico senza distinguere maiuscole (indice su lower(username)). Formato Nome.Cognome (es. MarioLuigi.Rossi03) obbligatorio in registrazione, poi modificabile']
+	birthday date [not null, note: 'Data completa: check età >= 16 in registrazione e caffè del compleanno (Kaffettino)']
+	course_year course_year_enum [not null]
+	course_year_confirmed_at timestamptz [null, note: 'Ultima conferma dell anno di corso: a ottobre, se precedente all inizio dell anno accademico, al login viene chiesto di confermarlo']
+	phone_number text [not null, note: 'Giustificato da Oggetti Smarriti: lo staff deve poter contattare chi ha perso un oggetto']
+	email text [unique, not null, note: 'Salvata in minuscolo. Formato UNIPA per tutti tranne che per le superiori (S4, S5)']
+	telegram_tag text [null, note: 'Unico senza distinguere maiuscole']
+	instagram_tag text [null, note: 'Unico senza distinguere maiuscole']
+	password text [not null, note: 'Hash bcrypt (nome "password" richiesto da Laravel)']
+	remember_token text [null, note: 'Token "ricordami" di Laravel']
+	role role_enum [not null, default: 'Student']
+	status user_status_enum [not null, default: 'Pending']
+	gender user_gender_enum [null, note: 'Facoltativo: personalizza i testi in base al genere']
+	email_verified_at timestamptz [null]
 
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+	// Privacy
+	privacy_accepted_at timestamptz [not null, note: 'Accountability GDPR: quando ha accettato informativa in registrazione']
+	terms_version text [not null, note: 'Quale versione informativa ha accettato — se cambia, si richiede']
+	anonymized_at timestamptz [null, note: 'Disiscrizione: gli utenti non si cancellano, si anonimizzano']
 
-  indexes {
-    status
-    course_id
-    school_id
-  }
+	course_id uuid [null, note: 'NULL per gli studenti delle superiori']
+	school_id uuid [null, note: 'Obbligatoria per gli staffer (Orientamento), opzionale per gli studenti']
 
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		status
+		course_id
+		school_id
+	}
 }
 
+// La tabella staff_profiles contiene le informazioni degli utenti esclusive agli associati (1:1 con users)
 Table core.staff_profiles {
-  id bigint [primary key, not null, increment]
-  user_id bigint [not null, unique]
+	id uuid [primary key, not null]
 
-  tax_code text [not null, unique] // Codice Fiscale
-  birth_city text [not null]        
-  birth_province text [not null]    
-  birth_country text [not null]     
+	tax_code text [not null, unique] // Codice Fiscale
+	birth_city text [not null]
+	birth_province text [not null]
+	birth_country text [not null]
 
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+	user_id uuid [not null, unique]
+
+	created_at timestamptz
+	updated_at timestamptz
 }
 
-Table core.courses{
-  id bigint [primary key, not null, increment]
-  name text [unique, not null]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
-}
-
+// La tabella academic_roles indica tutte le cariche che uno studente eletto può ricoprire
 Table core.academic_roles {
-  id bigint [pk, not null, increment]
-  name varchar [unique, not null, note: 'Seed iniziale: CDD, CCS, CDA, CDA-ERSU, CNSU, CSU']   // Non usiamo un enum perché devono essere customizzabili
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+	id uuid [pk, not null]
+	role text [unique, not null, note: 'Seed iniziale: CDD, CCS, CDA, CDA-ERSU, CNSU, CSU']   // Non usiamo un enum perché devono essere customizzabili
+
+	created_at timestamptz
+	updated_at timestamptz
 }
 
+// La tabella user_academic_roles mette in relazione users e academic_roles tenendo traccia dei mandati:
+// una persona può avere più cariche, e i mandati scaduti e non rinnovati restano archiviati
 Table core.user_academic_roles {
-  id bigint [pk, not null, increment]
-  user_id bigint [not null]
-  academic_role_id bigint [not null]
-  started_at date [not null]
-  expires_at date [not null]        // data di decadenza  
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
-  indexes {
-    (user_id, academic_role_id, started_at, expires_at) [unique]
-    expires_at
-  }
+	id uuid [pk, not null]
+	started_at date [not null]
+	expires_at date [not null, note: 'Data di decadenza. CHECK expires_at > started_at']
+
+	user_id uuid [not null]
+	academic_role_id uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(user_id, academic_role_id, started_at, expires_at) [unique, name: 'core_user_academic_roles_mandate_unique']
+		expires_at
+	}
 }
 
-Table core.schools{
-  id bigint [primary key, not null, increment]
-  name text [unique, not null]
-  lat "double precision" [null]
-  lon "double precision" [null]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+// La tabella schools memorizza le scuole superiori che qualcuno ha frequentato, con coordinate facoltative per la mappa
+Table core.schools {
+	id uuid [primary key, not null]
+
+	name text [not null]
+	city text [not null]
+
+	lat "double precision" [null]
+	lon "double precision" [null]
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(name, city) [unique]
+	}
 }
 
+// La tabella admin_courses identifica gli admin per un determinato corso di studi (pivot, PK composta)
+// ricordiamo che studenti di un corso possono essere admin per un altro corso, per evitare corsi scoperti a causa di carenza di staff
 Table core.admin_courses {
-  id bigint [pk, increment, not null]
-  user_id bigint [not null]
-  course_id bigint [not null]
-  created_at timestamp [not null]
+	user_id uuid [not null]
+	course_id uuid [not null]
 
-  indexes {
-    (user_id, course_id) [unique]
-  }
+	created_at timestamptz [not null, default: `now()`]
+
+	indexes {
+		(user_id, course_id) [pk]
+		course_id
+	}
 }
 
-// Storico ban, mai cancellato. Il campo email_pattern serve al requisito:
-// "se una persona bannata si rifà l'account con la seconda mail istituzionale,
-// il sistema blocca la richiesta".
+// 	La tabella bans memorizza lo storico ed i motivi dei ban (append-only: solo created_at).
+// 	Il campo email_pattern serve a riconoscere chi, dopo un ban, si registra con la seconda mail istituzionale:
+// 	il match NON rifiuta la registrazione, la lascia in attesa (Pending) con un warning per gli staffer (rischio omonimi).
 Table core.bans {
-  id bigint [pk, increment, not null]
-  user_id bigint [not null]
-  banned_by bigint [not null, note: 'Admin che ha eseguito il ban']
-  reason text [not null, note: 'Motivazione obbligatoria: viene inviata via mail']
-  email_pattern varchar [not null, note: 'Pattern normalizzato es. "marioluigi.rossi" — il match in registrazione va gestito come warning in coda revisione, NON rifiuto automatico (rischio omonimi)']
-  created_at timestamp [not null]
+	id uuid [pk, not null]
 
-  indexes {
-    email_pattern
-  }
+	reason text [not null, note: 'Motivazione obbligatoria: viene inviata via mail']
+	email_pattern text [not null, note: 'Parte locale normalizzata, es. "marioluigi.rossi"']
+
+	user_id uuid [not null]
+	banned_by uuid [not null, note: 'Admin che ha eseguito il ban']
+
+	created_at timestamptz [not null, default: `now()`]
+
+	indexes {
+		email_pattern
+		user_id
+	}
 }
 
-// ---------- AULETTE ----------
+// ---------- LUOGHI E ORGANIZZAZIONE DELL'ATENEO ----------
+//	Distinzione (in inglese si perde granularità, quindi è esplicitata qui):
+//		- macroareas  = macroaree (Ingegneria, Medicina, ...): raggruppano i dipartimenti
+//		- departments = dipartimenti accademici (unità organizzative, es. "Dipartimento di Ingegneria")
+//		- buildings   = edifici fisici (es. "Edificio 8"): ospitano aule e aulette, anche di dipartimenti diversi
+//		- classrooms  = aule; aulette = aulette dell'associazione (termine di dominio)
+
+// La tabella macroareas specifica le macroaree universitarie che accomunano più dipartimenti
+Table core.macroareas {
+	id uuid [primary key, not null]
+	name text [unique, not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// La tabella departments memorizza i dipartimenti accademici
+Table core.departments {
+	id uuid [pk, not null]
+
+	name text [unique, not null]     // Es: Dipartimento di Ingegneria
+
+	macroarea_id uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// La tabella buildings memorizza gli edifici fisici dell'ateneo
+Table core.buildings {
+	id uuid [pk, not null]
+
+	name text [not null]             // Es: Edificio 8
+	number integer [null, unique]    // Es: 8 — NULL per le sedi senza numero
+
+	lat "double precision" [null]
+	lon "double precision" [null]
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// La tabella aulette memorizza tutte le aulette dell'associazione.
 // Termine di dominio intoccabile: eccezione documentata alla convenzione inglese.
-
 Table core.aulette {
-  id bigint [pk, increment, not null]
-  name varchar [unique, not null]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+	id uuid [pk, not null]
+
+	name text [unique, not null]
+
+	// Lat e long così mostriamo nella mappa le aulette di Vivere
+	lat "double precision" [null]
+	lon "double precision" [null]
+
+	building_id uuid [not null] // In quale edificio si trova l'auletta
+
+	created_at timestamptz
+	updated_at timestamptz
 }
 
-// Gestori auletta: N:N con storico (assigned/removed → mail chiavi, req. HR)
-Table core.auletta_managers {
-  id bigint [pk, increment, not null]
-  user_id bigint [not null, note: 'Solo utenti non-Student (regola applicativa)']
-  auletta_id bigint [not null]
-  assigned_at timestamp [not null]
-  removed_at timestamp [null, note: 'NULL = gestione attiva. Alla rimozione: mail restituzione chiavi']
+// La tabella courses specifica tutti i corsi che esistono in università (la macroarea si ricava dal dipartimento)
+Table core.courses {
+	id uuid [primary key, not null]
 
-  indexes {
-    (user_id, auletta_id, assigned_at) [unique]
-  }
+	name text [unique, not null]
+
+	department_id uuid [not null]
+	auletta_id uuid [null, note: 'Auletta di afferenza: chi la amministra vede i resoconti Kaffettino di quell auletta; usata anche da Oggetti Smarriti']
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// La tabella classrooms specifica tutte le aule esistenti all'interno dell'ateneo
+Table core.classrooms {
+	id uuid [primary key, not null]
+
+	name text [null]                // Il nome dell'aula, se esiste, ad esempio "Aula Rubino"
+	code text [not null]            // Il codice dell'aula, ad esempio "F220"
+
+	building_id uuid [not null]     // L'edificio nel quale si trova l'aula
+	department_id uuid [null]       // Il dipartimento che la gestisce, se noto
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(building_id, code) [unique]
+	}
+}
+
+// Tabella pivot che accoppia i corsi con le aule in cui si tengono le lezioni:
+// un corso può usare più aule, anche in edifici diversi (serve per esempio a Oggetti Smarriti)
+Table core.classroom_course {
+	classroom_id uuid [not null]
+	course_id uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(classroom_id, course_id) [pk]
+		course_id
+	}
+}
+
+// Gestori auletta: N:N con storico (nomina/rimozione -> mail per le chiavi, req. HR)
+Table core.auletta_managers {
+	id uuid [pk, not null]
+
+	keys_state key_state_enum [not null, default: 'Handing_Over']
+
+	assigned_at timestamptz [not null]
+	removed_at timestamptz [null, note: 'NULL = gestione attiva. Alla rimozione: mail restituzione chiavi']
+
+	user_id uuid [not null, note: 'Solo utenti non-Student (regola applicativa)']
+	auletta_id uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(user_id, auletta_id, assigned_at) [unique]
+		(user_id, auletta_id) [unique, name: 'core_auletta_managers_active_unique', note: 'Indice parziale WHERE removed_at IS NULL: al massimo una gestione attiva per coppia']
+		auletta_id
+	}
+}
+
+// ---------- AUDIT ----------
+// Audit log di tutta la suite (spatie/laravel-activitylog, model App\Models\Activity), leggibile solo dai super admin.
+// Append-only per trigger: nessun UPDATE, DELETE solo delle righe più vecchie della conservazione (2 anni, D13).
+// Gli stessi eventi sono anche su file (canale di log "audit").
+Table core.activity_log {
+	id uuid [pk, not null]
+
+	log_name text [null, note: 'Modulo: core, humanresources, kaffettino, ...']
+	description text [not null]
+	event text [null, note: 'created, updated, deleted o evento applicativo (banned, accepted, broadcast, ...)']
+	attribute_changes jsonb [null, note: 'Valori prima/dopo (mai i segreti: password, token, codici)']
+	properties jsonb [null, note: 'Dati aggiuntivi, es. motivazione del ban']
+
+	subject_type text [null, note: 'Alias del morph map']
+	subject_id uuid [null]
+	causer_type text [null]
+	causer_id uuid [null]
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		log_name
+		(subject_type, subject_id)
+		(causer_type, causer_id)
+		created_at
+	}
+}
+
+// ---------- DISPOSITIVI EMBEDDED (gestione fleet) ----------
+// Condivisi da più moduli (ESP32 di Kaffettino oggi; kiosk di Calendario e lettori del Magazzino in futuro).
+// Si autenticano all'API con un token proprio, niente Sanctum.
+Table core.devices {
+	id uuid [pk, not null]
+
+	name text [not null]
+	type device_type_enum [not null]
+	token_hash text [unique, not null, note: 'SHA-256 del token API: il token in chiaro si mostra una sola volta alla creazione']
+	admin_code text [null, note: 'Codice della modalità amministratore (cambio wifi). CIFRATO con APP_KEY, non hashato: se il dispositivo è offline l admin deve poterlo rileggere dal pannello (ogni lettura finisce nell audit). Al dispositivo arriva solo un hash con sale, per verificarlo offline']
+	admin_code_changed_at timestamptz [null]
+	config_synced_at timestamptz [null, note: 'Ultimo download della configurazione: se è precedente a admin_code_changed_at il nuovo codice non è ancora arrivato']
+	firmware_version text [null]
+	last_seen_at timestamptz [null]
+	last_ip text [null]
+	revoked_at timestamptz [null]
+
+	auletta_id uuid [not null, note: 'Modificabile dal pannello: il dispositivo si può spostare']
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		auletta_id
+	}
 }
 
 // ---------- NOTIFICHE ----------
-// Nota implementativa: Laravel ha già la tabella `notifications` (canale
-// database) con payload JSON. Questo modello concettuale mappa quel
-// meccanismo + gli allegati richiesti dal documento.
+// È la tabella standard del canale "database" di Laravel (usata anche dalla campanella di Filament),
+// spostata nello schema core. Titolo e testo stanno in "data".
 
 Table core.notifications {
-  id bigint [pk, increment, not null]
-  user_id bigint [not null]
-  title varchar [not null]
-  body text [not null]
-  read_at timestamp [null]
-  created_at timestamp [not null]
+	id uuid [pk, not null]
+	type text [not null, note: 'Classe della Notification Laravel che l ha generata']
+	data jsonb [not null, note: 'Titolo, testo, azioni. Deve essere jsonb: Filament filtra con data->format']
+	read_at timestamptz [null]
 
-  indexes {
-    (user_id, read_at) // "le mie notifiche non lette"
-  }
+	notifiable_type text [not null, note: 'Alias del morph map, nella pratica sempre "user"']
+	notifiable_id uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(notifiable_type, notifiable_id)
+		(notifiable_id, read_at) // "le mie notifiche non lette"
+	}
 }
 
 Table core.notification_attachments {
-  id bigint [pk, increment, not null]
-  notification_id bigint [not null]
-  file_path varchar [not null, note: 'Path su MinIO/S3']
-  created_at timestamp [not null]
+	id uuid [pk, not null]
+	file_path text [not null, note: 'Percorso nel disco di storage dell applicazione']
+
+	notification_id uuid [not null]
+
+	created_at timestamptz [not null, default: `now()`]
 }
 
 // Preferenze email per servizio: "si potrà scegliere se ricevere le email
 // e per quali servizi, modificabile in qualsiasi momento"
 Table core.email_preferences {
-  id bigint [pk, increment, not null]
-  user_id bigint [not null]
-  service varchar [not null, note: 'Nome modulo: drive, kaffettino, eventi...']
-  enabled boolean [not null, default: true]
+	id uuid [pk, not null]
+	service text [not null, note: 'Alias del modulo: humanresources, kaffettino, drive...']
+	enabled boolean [not null, default: true]
 
-  indexes {
-    (user_id, service) [unique]
-  }
+	user_id uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(user_id, service) [unique]
+	}
 }
 
 // ---------- PROFESSORI (anti-accesso non autorizzato) ----------
 
-// Popolata dal job di scraping del sito di ateneo (isolato: se fallisce non blocca nulla).
-// Il match con gli utenti in Pending è calcolato a query time sul nome
-// normalizzato e mostrato come WARNING agli staffer, mai blocco automatico.
+// Popolata dal job di scraping schedulato del sito di ateneo (isolato: se fallisce non blocca nulla).
+// Il match con gli utenti in Pending è calcolato sul nome normalizzato
+// e mostrato come WARNING agli staffer, mai blocco automatico.
 Table core.professors {
-  id bigint [pk, increment, not null]
-  full_name varchar [not null]
-  normalized_name varchar [not null, note: 'lowercase, senza spazi/accenti — per il confronto']
-  scraped_at timestamp [not null]
+	id uuid [pk, not null]
+	full_name text [not null]
+	normalized_name text [not null, note: 'lowercase, senza spazi/accenti — per il confronto']
+	scraped_at timestamptz [not null]
 
-  indexes {
-    normalized_name
-  }
+	indexes {
+		normalized_name
+	}
 }
+
+// ---------- CHANGELOG ----------
 
 Table core.changelogs {
-  id bigint [pk, increment, not null]
-  service varchar [not null, note: 'Modulo di riferimento: hr, drive, kaffettino... — mostrato al primo login utile su quella piattaforma']
-  title varchar [not null]
-  body text [not null]
-  published_at timestamp [not null, note: 'Visibile agli utenti solo da questa data — permette di preparare la entry prima del rilascio']
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+	id uuid [pk, not null]
+	service text [not null, note: 'Alias del modulo: humanresources, kaffettino... — mostrato al primo login utile su quella piattaforma']
+	title text [not null]
+	body text [not null]
+	published_at timestamptz [not null, note: 'Visibile agli utenti solo da questa data — permette di preparare la entry prima del rilascio']
 
-  indexes {
-    (service, published_at)  // "changelog non visti del modulo X" — query a ogni login
-  }
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(service, published_at)  // "changelog non visti del modulo X" — query a ogni login
+	}
 }
 
-// Pivot: traccia chi ha visto cosa. Riga presente = visto.
+// Pivot: traccia chi ha visto cosa. Riga presente = visto (PK composta: una entry si vede una volta sola)
 Table core.changelog_user {
-  id bigint [pk, increment, not null]
-  changelog_id bigint [not null]
-  user_id bigint [not null]
-  seen_at timestamp [not null]
+	seen_at timestamptz [not null, default: `now()`]
 
-  indexes {
-    (changelog_id, user_id) [unique]  // un utente vede una entry una volta sola
-  }
+	changelog_id uuid [not null]
+	user_id uuid [not null]
+
+	indexes {
+		(changelog_id, user_id) [pk]
+		user_id
+	}
 }
 
-Ref: core.changelog_user.changelog_id > core.changelogs.id
-Ref: core.changelog_user.user_id > core.users.id
+Ref: core.changelog_user.changelog_id > core.changelogs.id [delete: cascade]
+Ref: core.changelog_user.user_id > core.users.id [delete: cascade]
 
 Ref: core.users.course_id > core.courses.id
 Ref: core.users.school_id > core.schools.id
 
-Ref: core.admin_courses.user_id > core.users.id
-Ref: core.admin_courses.course_id > core.courses.id
+Ref: core.departments.macroarea_id > core.macroareas.id
+Ref: core.courses.department_id > core.departments.id
+Ref: core.courses.auletta_id > core.aulette.id
+Ref: core.aulette.building_id > core.buildings.id
+
+Ref: core.classroom_course.course_id > core.courses.id [delete: cascade]
+Ref: core.classroom_course.classroom_id > core.classrooms.id [delete: cascade]
+
+Ref: core.classrooms.building_id > core.buildings.id
+Ref: core.classrooms.department_id > core.departments.id
+
+Ref: core.admin_courses.user_id > core.users.id [delete: cascade]
+Ref: core.admin_courses.course_id > core.courses.id [delete: cascade]
 
 Ref: core.user_academic_roles.user_id > core.users.id
 Ref: core.user_academic_roles.academic_role_id > core.academic_roles.id
@@ -269,8 +538,329 @@ Ref: core.bans.banned_by > core.users.id
 Ref: core.auletta_managers.user_id > core.users.id
 Ref: core.auletta_managers.auletta_id > core.aulette.id
 
-Ref: core.notifications.user_id > core.users.id
-Ref: core.notification_attachments.notification_id > core.notifications.id
+Ref: core.notification_attachments.notification_id > core.notifications.id [delete: cascade]
 
-Ref: core.email_preferences.user_id > core.users.id
-Ref: core.staff_profiles.user_id - core.users.id
+Ref: core.email_preferences.user_id > core.users.id [delete: cascade]
+Ref: core.staff_profiles.user_id - core.users.id [delete: cascade]
+
+Ref: core.devices.auletta_id > core.aulette.id
+
+
+// =====================================================================
+// ---------- KAFFETTINO (schema kaffettino) ----------
+// =====================================================================
+//	Stato: definitivo, tradotto nelle migration di Modules/Kaffettino/database/migrations.
+//	Decisioni prese (vedi CLAUDE.md): il conto personale si apre solo allo staff (D8); il debito massimo
+//	è del magazzino (D6); l'avviso di scorta bassa va ai gestori delle aulette di quel magazzino (D7);
+//	PIN facoltativo per card, salvato come hash e reimpostabile via mail, mai recuperabile (D9);
+//	fornitore e prezzo dipendono dal magazzino; scorte mai sotto zero; una card attiva per persona;
+//	coupon usabile una sola volta per persona; omaggi agli ospiti sul conto dell'auletta.
+//	Le immagini "buongiornissimo kaffè!" e le festività sono nel codice (non nel DB), così nessuno
+//	può cancellarle dal pannello: enum PHP delle festività + cartella di immagini nel modulo.
+//	Il conto dell'auletta e la gestione dei dispositivi (core.devices, codice admin dal pannello) sono confermati.
+
+enum kaffettino_transaction_type_enum {
+	"Purchase"       // Acquisto di uno o più prodotti (importo negativo)
+	"TopUp"          // Ricarica fatta da un admin (importo positivo; mai sul proprio conto)
+	"Gift"           // Prodotti offerti dagli admin (es. a ospiti): escono dal magazzino, nessun incasso
+	"BirthdayGift"   // Caffè gratis del compleanno (importo 0)
+	"Adjustment"     // Rettifica manuale di un admin (importo +/-), sempre con nota
+}
+
+enum kaffettino_transaction_channel_enum {
+	"Embedded"  // Badge sull'ESP32 in auletta
+	"Web"       // Dal portale (acquisto da web o ricarica)
+}
+
+enum kaffettino_stock_reason_enum {
+	"Restock"     // Carico merce
+	"Loss"        // Prodotto perso, scaduto o rotto
+	"Correction"  // Correzione dell'inventario
+}
+
+// Magazzini: il saldo e il debito massimo sono legati al magazzino, condiviso da più aulette
+// (es. Ingegneria = 2° piano, 3° piano e DEIM; Economia ha il suo)
+Table kaffettino.warehouses {
+	id uuid [pk, not null]
+
+	name text [unique, not null]
+	max_debt_cents integer [not null, note: 'Debito massimo per conto personale (D6). Alla creazione si propone 3 × il prezzo del caffè. CHECK >= 0']
+	delisted_at timestamptz [null, note: 'Magazzino dismesso: non si cancella per lo storico']
+
+	birthday_product_id uuid [null, note: 'Prodotto offerto al compleanno (il caffè)']
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// Aulette in cui si vende con Kaffettino e magazzino da cui prendono i prodotti (estende core.aulette, 1:1)
+Table kaffettino.auletta_warehouse {
+	auletta_id uuid [pk, not null]
+
+	delisted_at timestamptz [null, note: 'Auletta tolta dalla vendita (gli admin possono delistare le aulette)']
+
+	warehouse_id uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+Table kaffettino.suppliers {
+	id uuid [pk, not null]
+
+	name text [not null]
+	address text [not null]
+	phone_number text [null]
+	email text [null]
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// Tipologie di prodotto (per l'istogramma "cosa compri" e le statistiche)
+Table kaffettino.product_categories {
+	id uuid [pk, not null]
+	name text [unique, not null]   // Es: Caffè, Snack, Bibite
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// Catalogo comune a tutti i magazzini: un prodotto creato non si cancella mai (storicità delle vendite).
+// Così un admin può aggiungere al proprio magazzino un prodotto già presente in un altro.
+Table kaffettino.products {
+	id uuid [pk, not null]
+
+	name text [not null]
+
+	category_id uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// Prodotto in vendita in un magazzino: fornitore, prezzo, scorte e soglia sono per magazzino
+Table kaffettino.warehouse_products {
+	id uuid [pk, not null]
+
+	price_cents integer [not null, note: 'CHECK >= 0. Lo storico dei prezzi sta nelle righe di vendita e nell audit log']
+	stock_quantity integer [not null, default: 0, note: 'CHECK >= 0: se le scorte non bastano la vendita viene rifiutata']
+	low_stock_threshold integer [null, note: 'Sotto questa soglia parte la mail ai gestori delle aulette del magazzino (D7)']
+	delisted_at timestamptz [null, note: 'Tolto dalla vendita ma conservato (non si cancella)']
+
+	warehouse_id uuid [not null]
+	product_id uuid [not null]
+	supplier_id uuid [not null, note: 'Il fornitore può cambiare da magazzino a magazzino']
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(warehouse_id, product_id) [unique]
+	}
+}
+
+// Carichi e rettifiche di magazzino (le uscite per vendita stanno in transaction_items). Append-only.
+Table kaffettino.stock_movements {
+	id uuid [pk, not null]
+
+	quantity integer [not null, note: 'Positivo = carico, negativo = perdita/correzione (mai oltre le scorte presenti)']
+	reason kaffettino_stock_reason_enum [not null]
+	unit_cost_cents integer [null, note: 'Costo di acquisto, per le previsioni di guadagno']
+	note text [null]
+
+	warehouse_product_id uuid [not null]
+	performed_by uuid [not null]
+
+	created_at timestamptz [not null, default: `now()`]
+}
+
+// Card NFC. Una sola card attiva per persona, valida per tutti i suoi conti.
+Table kaffettino.cards {
+	id uuid [pk, not null]
+
+	uid text [unique, not null, note: 'Identificativo NFC letto dal PN532']
+	pin_hash text [null, note: 'PIN facoltativo (D9): solo hash, si reimposta via mail, non si recupera']
+	pin_failed_attempts smallint [not null, default: 0, note: 'Blocco dopo N tentativi sbagliati (contro i PIN brevi)']
+	assigned_at timestamptz [not null]
+	revoked_at timestamptz [null, note: 'Card smarrita o sostituita']
+
+	user_id uuid [not null]
+	assigned_by uuid [not null, note: 'Admin che ha assegnato la card']
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		user_id [unique, name: 'kaffettino_cards_active_user_unique', note: 'Indice parziale WHERE revoked_at IS NULL']
+	}
+}
+
+// Conti: intestati a una persona (uno per magazzino, solo staff, D8) oppure a un'auletta.
+// Il conto dell'auletta raccoglie gli omaggi agli ospiti: va in negativo senza limite di debito,
+// non riceve le mail settimanali sui debiti e non ha card.
+// Un conto personale è utilizzabile solo se la persona ha una card attiva.
+Table kaffettino.accounts {
+	id uuid [pk, not null]
+
+	balance_cents bigint [not null, default: 0, note: 'Negativo = debito. Aggiornato nella stessa transazione DB del movimento, con lock sulla riga']
+	closed_at timestamptz [null]
+
+	user_id uuid [null, note: 'Conto personale. CHECK: esattamente uno tra user_id e auletta_id']
+	auletta_id uuid [null, note: 'Conto dell auletta (omaggi)']
+	warehouse_id uuid [not null]
+	opened_by uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+
+	indexes {
+		(user_id, warehouse_id) [unique]
+		auletta_id [unique]
+	}
+}
+
+// Impostazioni Kaffettino per persona (non per conto)
+Table kaffettino.user_settings {
+	user_id uuid [pk, not null]
+
+	statistics_consent_at timestamptz [null, note: 'Consenso alle statistiche anonime ("bevi più caffè del 60%..."): NULL = non partecipa']
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// Movimenti di denaro e merce. Append-only: non si modificano né si cancellano, si correggono con un Adjustment.
+// L'id può essere generato dall'ESP32 (UUIDv7): se il dispositivo ritrasmette lo stesso acquisto
+// (rete UNIPA congestionata, coda offline) il server lo riconosce e non lo registra due volte.
+Table kaffettino.transactions {
+	id uuid [pk, not null]
+
+	type kaffettino_transaction_type_enum [not null]
+	channel kaffettino_transaction_channel_enum [not null]
+	amount_cents bigint [not null, note: 'Con segno: + ricarica, - acquisto, - valore dei prodotti per i Gift (così si sa quanto si è offerto), 0 compleanno']
+	balance_after_cents bigint [not null, note: 'Saldo del conto dopo il movimento']
+	occurred_at timestamptz [not null, note: 'Quando è avvenuto sul dispositivo (può precedere created_at in caso di coda offline)']
+	note text [null]
+
+	account_id uuid [not null, note: 'Per i Gift: di norma il conto dell auletta']
+	warehouse_id uuid [not null]
+	auletta_id uuid [null, note: 'Dove è avvenuto; NULL per le ricariche da portale']
+	device_id uuid [null]
+	coupon_id uuid [null, note: 'Coupon non cumulabili: al massimo uno per movimento']
+	performed_by uuid [null, note: 'Admin che ha fatto ricarica/omaggio/rettifica. Per le ricariche deve essere diverso dal titolare (regola applicativa)']
+
+	created_at timestamptz [not null, default: `now()`]
+
+	indexes {
+		(account_id, occurred_at)
+		(warehouse_id, occurred_at)  // resoconti per magazzino/periodo
+		(auletta_id, occurred_at)    // resoconti per auletta/periodo
+	}
+}
+
+// Righe di un movimento: prezzo "fotografato" al momento della vendita
+Table kaffettino.transaction_items {
+	id uuid [pk, not null]
+
+	quantity integer [not null, note: 'CHECK > 0']
+	unit_price_cents integer [not null]
+	discount_cents integer [not null, default: 0]
+
+	transaction_id uuid [not null]
+	warehouse_product_id uuid [not null]
+}
+
+// Coupon: percentuale di sconto, non cumulabili, validi solo sui prodotti scelti, con scadenza obbligatoria
+Table kaffettino.coupons {
+	id uuid [pk, not null]
+
+	code text [unique, not null]
+	discount_percent smallint [not null, note: 'CHECK tra 1 e 100']
+	starts_at timestamptz [not null]
+	expires_at timestamptz [not null]
+
+	created_by uuid [not null]
+
+	created_at timestamptz
+	updated_at timestamptz
+}
+
+// Prodotti su cui vale un coupon (pivot)
+Table kaffettino.coupon_product {
+	coupon_id uuid [not null]
+	warehouse_product_id uuid [not null]
+
+	indexes {
+		(coupon_id, warehouse_product_id) [pk]
+	}
+}
+
+// Coupon attivati dal portale per il prossimo acquisto. Ogni coupon si usa UNA sola volta per persona:
+// la chiave primaria (coupon_id, user_id) impedisce una seconda attivazione.
+Table kaffettino.coupon_activations {
+	activated_at timestamptz [not null, default: `now()`]
+	used_at timestamptz [null, note: 'Valorizzato al primo acquisto in cui viene applicato']
+
+	coupon_id uuid [not null]
+	user_id uuid [not null]
+	transaction_id uuid [null, note: 'Movimento in cui è stato usato']
+
+	indexes {
+		(coupon_id, user_id) [pk]
+	}
+}
+
+// Un solo caffè gratis all'anno per persona, in qualunque magazzino
+Table kaffettino.birthday_gifts {
+	transaction_id uuid [pk, not null, note: 'Movimento BirthdayGift corrispondente (1:1)']
+
+	year smallint [not null]
+
+	user_id uuid [not null]
+
+	indexes {
+		(user_id, year) [unique]
+	}
+}
+
+Ref: kaffettino.warehouses.birthday_product_id > kaffettino.products.id
+Ref: kaffettino.auletta_warehouse.auletta_id - core.aulette.id
+Ref: kaffettino.auletta_warehouse.warehouse_id > kaffettino.warehouses.id
+
+Ref: kaffettino.products.category_id > kaffettino.product_categories.id
+Ref: kaffettino.warehouse_products.warehouse_id > kaffettino.warehouses.id
+Ref: kaffettino.warehouse_products.product_id > kaffettino.products.id
+Ref: kaffettino.warehouse_products.supplier_id > kaffettino.suppliers.id
+
+Ref: kaffettino.stock_movements.warehouse_product_id > kaffettino.warehouse_products.id
+Ref: kaffettino.stock_movements.performed_by > core.users.id
+
+Ref: kaffettino.cards.user_id > core.users.id
+Ref: kaffettino.cards.assigned_by > core.users.id
+
+Ref: kaffettino.accounts.user_id > core.users.id
+Ref: kaffettino.accounts.auletta_id > core.aulette.id
+Ref: kaffettino.accounts.warehouse_id > kaffettino.warehouses.id
+Ref: kaffettino.accounts.opened_by > core.users.id
+Ref: kaffettino.user_settings.user_id - core.users.id
+
+Ref: kaffettino.transactions.account_id > kaffettino.accounts.id
+Ref: kaffettino.transactions.warehouse_id > kaffettino.warehouses.id
+Ref: kaffettino.transactions.auletta_id > core.aulette.id
+Ref: kaffettino.transactions.device_id > core.devices.id
+Ref: kaffettino.transactions.coupon_id > kaffettino.coupons.id
+Ref: kaffettino.transactions.performed_by > core.users.id
+Ref: kaffettino.transaction_items.transaction_id > kaffettino.transactions.id
+Ref: kaffettino.transaction_items.warehouse_product_id > kaffettino.warehouse_products.id
+
+Ref: kaffettino.coupons.created_by > core.users.id
+Ref: kaffettino.coupon_product.coupon_id > kaffettino.coupons.id [delete: cascade]
+Ref: kaffettino.coupon_product.warehouse_product_id > kaffettino.warehouse_products.id
+Ref: kaffettino.coupon_activations.coupon_id > kaffettino.coupons.id
+Ref: kaffettino.coupon_activations.user_id > core.users.id
+Ref: kaffettino.coupon_activations.transaction_id > kaffettino.transactions.id
+
+
+Ref: kaffettino.birthday_gifts.user_id > core.users.id
+Ref: kaffettino.birthday_gifts.transaction_id > kaffettino.transactions.id

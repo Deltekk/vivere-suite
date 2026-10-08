@@ -1,5 +1,6 @@
 <?php
 
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,7 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Le rotte fuori dai panel protette da "auth" mandano i guest al login di HR,
+        // come fanno i panel (requisito del preambolo). Nella suite non esiste una rotta "login".
+        $middleware->redirectGuestsTo(fn (): ?string => Filament::getPanel('hr')->getLoginUrl());
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

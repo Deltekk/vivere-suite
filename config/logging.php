@@ -65,6 +65,16 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Suite Vivere: copia su file dell'audit log (requisito "log memorizzati in OS").
+        // Un file al giorno, conservati per il periodo di D13 (2 anni) e poi cancellati.
+        'audit' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/audit.log'),
+            'level' => 'info',
+            'days' => (int) env('VIVERE_AUDIT_RETENTION_DAYS', 730),
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

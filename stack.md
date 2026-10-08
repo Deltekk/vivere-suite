@@ -1,7 +1,9 @@
 # Suite Vivere — Stack tecnologico e dipendenze
 
 > Documento di riferimento per lo stack e le dipendenze di ogni modulo.
-> Ultimo aggiornamento: luglio 2026 — verificare le versioni al momento dell'installazione.
+> Ultimo aggiornamento: ottobre 2026. Le versioni indicate sono quelle installate (vedi `composer.lock` e `package-lock.json`).
+> Regola generale: **meno librerie possibile**. Si aggiunge un pacchetto solo se è ben documentato, mantenuto e accorcia davvero il codice.
+> Ogni pacchetto si installa **quando si sviluppa il modulo che lo usa**, non in anticipo.
 
 ---
 
@@ -9,79 +11,95 @@
 
 | Livello | Scelta |
 |---|---|
-| Linguaggio | PHP 8.3+ (backend), Python 3.12 (script di supporto: scraping, watermark) |
-| Framework | Laravel 12, monolite modulare |
-| Modularizzazione | `nwidart/laravel-modules` — un modulo per ogni progetto della suite |
-| Database | PostgreSQL 16 — un'istanza, uno schema per modulo (`core`, `drive`, `kaffettino`, ...) |
-| Cache / Code / Sessioni | Redis 7 |
-| Frontend | TALL stack: Tailwind CSS 4 + Alpine.js 3 + Laravel Livewire 3 |
-| Pannelli admin | Filament 4 |
-| Real-time | Laravel Reverb (WebSocket self-hosted) + Laravel Echo |
-| Storage file | MinIO (S3-compatible) via Flysystem |
+| Linguaggio | PHP 8.5 (backend), Python 3.12 (script di supporto: scraping, watermark) |
+| Framework | Laravel 13, monolite modulare |
+| Modularizzazione | `nwidart/laravel-modules` 13 — un modulo per ogni progetto della suite |
+| Database | PostgreSQL 18 — un'istanza e un database; schemi `public` (tabelle tecniche Laravel), `core` (entità condivise), uno schema per ogni modulo con tabelle proprie (`kaffettino`, ...) |
+| Chiavi primarie | UUID (v7, generati da Laravel con `HasUuids`) |
+| Cache / Code / Sessioni | Redis |
+| UI | **Filament 5 per tutti i moduli** ("Filament-first"), su Livewire 4 + Alpine.js + Tailwind CSS 4 |
+| Real-time | Laravel Reverb + Laravel Echo (quando servirà: Assistest, Calendario) |
+| Storage file | Disco locale privato di Laravel con URL firmati temporanei (MinIO community è archiviato, vedi sezione 6) |
 | Notifiche mobile | PWA + Web Push (nessuna app nativa) |
-| Build frontend | Vite (integrato in Laravel) |
+| Build frontend | Vite, **un solo build** nella root (i moduli non hanno un proprio `vite.config.js`) |
 | Deploy | Docker Compose |
 
 ### Servizi Docker Compose
 
 | Servizio | Immagine / Note |
 |---|---|
-| `app` | PHP-FPM 8.3 + estensioni (`pdo_pgsql`, `redis`, `gd`, `zip`, `intl`) + **LibreOffice headless** (per Filigrana) |
-| `nginx` | Reverse proxy |
-| `postgres` | `postgres:16` |
-| `redis` | `redis:7` |
-| `horizon` | Stesso container `app`, comando `php artisan horizon` (worker code) |
-| `scheduler` | Stesso container `app`, cron con `php artisan schedule:run` |
-| `reverb` | Stesso container `app`, comando `php artisan reverb:start` |
-| `minio` | `minio/minio` |
-| `mailpit` | Solo in dev — cattura tutte le email in uscita |
+| `pgsql` | `postgres:18-alpine` |
+| `redis` | `redis:alpine` |
+| `mailpit` | Solo in dev — cattura tutte le email in uscita (http://localhost:8025) |
+| `clamav` | *Previsto*: antivirus per i file caricati (`clamav/clamav`), da aggiungere con il primo modulo che carica file |
+| `laravel.test` | Container PHP di Sail: non usato nello sviluppo "ibrido" (PHP gira sull'host) |
+
+In produzione serviranno anche: `app` (PHP-FPM 8.5 + `pdo_pgsql`, `redis`, `gd`, `zip`, `intl`, LibreOffice headless per Filigrana), `nginx`, worker delle code, scheduler (`php artisan schedule:run`) ed eventualmente `reverb`.
 
 ---
 
 ## 2. Progetto monolitico principale (core condiviso)
 
-Dipendenze installate una volta, usate da tutti i moduli.
-
-### Composer
+### Composer — installati
 
 | Pacchetto | A cosa serve |
 |---|---|
-| `nwidart/laravel-modules` | Struttura a moduli (HR, Drive, Kaffettino...) |
-| `livewire/livewire` | Componenti UI reattivi in PHP/Blade |
-| `filament/filament` | Pannelli admin (CRUD, tabelle, dashboard) |
-| `coolsam/modules` (o plugin equivalente) | Integrazione Filament ↔ laravel-modules |
-| `laravel/fortify` | Backend auth headless: login, reset password, 2FA — la UI la fai tu in Livewire (necessario per i flussi custom HR) |
-| `laravel/sanctum` | Token API per i dispositivi embedded (ESP32, Raspberry) |
-| `laravel/reverb` | Server WebSocket (Assistest live, aggiornamenti real-time) |
-| `laravel/horizon` | Gestione e monitoraggio code Redis |
-| `spatie/laravel-permission` | Ruoli e permessi (studente / staff / admin / super admin + gestore auletta) |
-| `spatie/laravel-medialibrary` | Allegati e media (foto segnalazioni, oggetti smarriti, allegati notifiche/eventi) |
-| `laravel-notification-channels/webpush` | Canale Web Push per le Notifications |
-| `league/flysystem-aws-s3-v3` | Driver S3 per MinIO |
-| `maatwebsite/excel` | Export Excel (resoconti Kaffettino, Eventi, Elezioni) |
-| `spatie/laravel-activitylog` | Audit log applicativo append-only (requisito super admin) — in aggiunta, canale Monolog dedicato su file per i log "in OS" richiesti dal documento |
-| `symfony/dom-crawler` + `symfony/css-selector` | Scraping (professori, orari, aule UNIPA) con il client `Http` di Laravel |
-| `predis/predis` (o est. `phpredis`) | Client Redis |
+| `laravel/framework` ^13 | Framework |
+| `nwidart/laravel-modules` ^13 | Struttura a moduli (HumanResources, Kaffettino, ...) |
+| `wikimedia/composer-merge-plugin` | Unisce i `composer.json` dei moduli (autoload) |
+| `filament/filament` ^5.10 | UI di tutti i moduli: panel, CRUD, tabelle, form, dashboard, notifiche, grafici (Chart.js), export XLSX/CSV, import CSV, autenticazione con 2FA via email |
+| `livewire/livewire` ^4.4.7 | Base di Filament e dei componenti personalizzati |
+| `spatie/laravel-activitylog` ^5.1 | Audit log append-only (`core.activity_log`, model `App\Models\Activity`), con copia su file (canale `audit`) |
+| `laravel/tinker` | Console interattiva |
+
+### Composer — previsti (da installare quando servono)
+
+| Pacchetto | Modulo | A cosa serve |
+|---|---|---|
+| `laravel/reverb` | Assistest, Calendario | Server WebSocket |
+| `laravel/horizon` | Produzione | Monitoraggio code Redis (valutare se serve davvero) |
+| `laravel-notification-channels/webpush` | Core | Web Push per le notifiche PWA |
+| `symfony/dom-crawler` + `symfony/css-selector` | HR, Orari, Aule Libere | Scraping (professori, orari, aule UNIPA) con il client `Http` di Laravel |
+| `spatie/laravel-medialibrary` | Segnalazioni, Oggetti Smarriti, Magazzino | Allegati e media (valutare caso per caso, per allegati semplici basta lo Storage di Laravel) |
 
 ### NPM
 
 | Pacchetto | A cosa serve |
 |---|---|
-| `tailwindcss` | Styling |
-| `alpinejs` | Interazioni client-side (già incluso in Livewire, esplicito se serve standalone) |
-| `laravel-echo` + `pusher-js` | Client WebSocket verso Reverb |
-| `vite-plugin-pwa` (o service worker manuale) | Manifest PWA + service worker per Web Push |
-| `apexcharts` | Grafici e statistiche (Kaffettino, Assistest, Segnalazioni) |
+| `tailwindcss` + `@tailwindcss/vite` | Styling (tema unico `resources/css/filament/theme.css`) |
+| `vite` + `laravel-vite-plugin` | Build |
+| `@laravel/multiplex` (dev) | Usato da `php artisan dev` su Linux/macOS per avviare tutti i processi in un terminale |
+| `concurrently` | Usato da `php artisan dev` su Windows |
+| `laravel-echo` + `pusher-js` | *Previsti*: client WebSocket verso Reverb |
+| `vite-plugin-pwa` (o service worker manuale) | *Previsto*: manifest PWA + service worker |
+
+Alpine.js è già incluso in Livewire, non va installato a parte.
 
 ### Dev / Qualità (require-dev)
 
 | Pacchetto | A cosa serve |
 |---|---|
-| `pestphp/pest` | Test |
+| `pestphp/pest` + `pestphp/pest-plugin-laravel` | Test |
 | `laravel/pint` | Code style |
-| `larastan/larastan` | Analisi statica |
-| `laravel/telescope` | Debug in locale |
-| `barryvdh/laravel-debugbar` | Debug in locale |
+| `larastan/larastan` | Analisi statica (livello 7) |
+| `laravel/pail` | Log in tempo reale (processo `logs` di `artisan dev`) |
+| `laravel/sail` | Fornisce `compose.yaml` e le immagini Docker di sviluppo |
+| `laravel/pao` | Output dei test ottimizzato per gli agenti LLM |
+| `fakerphp/faker`, `mockery/mockery`, `nunomaduro/collision` | Supporto ai test |
+
+### Rimossi o scartati (e perché)
+
+| Pacchetto | Motivo |
+|---|---|
+| `laravel/fortify` | La sua 2FA è solo TOTP; Filament 5 fa già login, reset password, verifica email, rate limiting e 2FA via email |
+| `spatie/laravel-permission` | 4 ruoli fissi e gerarchici + relazioni di contesto (admin di corso, gestore auletta): bastano l'enum `App\Enums\Role` e le Policy |
+| `laravel/sanctum` | Gli ESP32 usano un token di dispositivo verificato da un middleware della suite (tabella `kaffettino.devices`) |
+| `coolsam/modules` | Ogni modulo registra il proprio panel Filament in poche righe (vedi `VivereSuitePanelProvider`) |
+| `predis/predis` | Si usa l'estensione `phpredis`, già presente |
+| `apexcharts` | Bastano i widget grafici di Filament (Chart.js) |
+| `maatwebsite/excel` | Filament esporta già in XLSX/CSV e importa CSV |
+| `brick/money` | Proposta: importi in centesimi interi e calcolo degli sconti con aritmetica intera (da confermare con Kaffettino) |
+| `livewire/blaze` | Residuo dello starter kit, non usato |
 
 ---
 
@@ -89,57 +107,56 @@ Dipendenze installate una volta, usate da tutti i moduli.
 
 Molti moduli **non richiedono nulla oltre al core**: sono CRUD + Policy + Notifications. Dove serve altro, è indicato sotto.
 
-### 3.1 HR (core identità)
+### 3.1 HR (core identità) — fatto (vedi CLAUDE.md, "Stato attuale")
 
 | Dipendenza | Note |
 |---|---|
-| `laravel/fortify` (core) | Login, reset password, 2FA via email |
-| Validazione password nativa | `Password::min(12)->mixedCase()->numbers()->symbols()->uncompromised()` — copre policy + password comuni/compromesse |
-| `RateLimiter` nativo | Rate limiting login |
-| `spatie/laravel-permission` (core) | Ruoli, admin per corso, ruoli istituzionali con storico |
-| `symfony/dom-crawler` (core) | Scraping professori ateneo (job schedulato isolato) |
+| Filament (core) | Login, reset password, verifica email, 2FA via email obbligatoria, rate limiting del login |
+| Validazione password nativa | `Password::min(12)->mixedCase()->numbers()->symbols()->uncompromised()` in `AppServiceProvider` |
+| Enum `Role` + Policy | Ruoli, admin per corso (`core.admin_courses`), ruoli istituzionali con storico |
+| `symfony/dom-crawler` (previsto) | Scraping professori ateneo: si installa quando si trova la fonte (oggi c'è l'import da file) |
+| `spatie/laravel-activitylog` (core) | Audit di ban, cambi di ruolo, accettazioni, notifiche, ... |
 | — | Schermata attesa, matching ban, migrazione email: logica applicativa, nessun pacchetto |
 
 ### 3.2 Problemi Tecnici
 
 | Dipendenza | Note |
 |---|---|
-| `spatie/laravel-medialibrary` (core) | Foto/video allegati alla segnalazione |
-| — | Versione ticketing (extra): riusa Notifications + Livewire, nessun pacchetto nuovo |
+| Storage Laravel | Foto/video allegati alla segnalazione |
+| — | Versione ticketing (extra): riusa Notifications + Filament, nessun pacchetto nuovo |
 
-### 3.3 Kaffettino
+### 3.3 Kaffettino — in sviluppo (schema DB fatto)
 
 | Dipendenza | Note |
 |---|---|
-| `laravel/sanctum` (core) | API REST per l'embedded ESP32 (token per dispositivo) |
-| `maatwebsite/excel` (core) | Export resoconti |
-| `apexcharts` (core, npm) | Statistiche, trend, istogrammi |
-| `brick/money` | **Consigliato**: gestione importi in centesimi — mai float per i soldi (debiti, saldi, ricariche) |
+| Middleware "token di dispositivo" | API REST per l'ESP32, senza Sanctum (dispositivi in `core.devices`, gestione fleet nel pannello) |
+| Filament (core) | Resoconti, export Excel, statistiche e grafici |
+| — | Soldi in centesimi interi, mai float (debiti, saldi, ricariche) |
 
-**Firmware embedded (ESP32, fuori dal monolite):** PlatformIO + Arduino framework; librerie tipiche: `Adafruit PN532` (NFC), `U8g2` (OLED), `DFRobotDFPlayerMini` (MP3), `Keypad`, `ArduinoJson`, `WiFiClientSecure`. Parla solo con l'API Sanctum del modulo.
+**Firmware embedded (ESP32, fuori dal monolite):** PlatformIO + Arduino framework; librerie tipiche: `Adafruit PN532` (NFC), `U8g2` (OLED), `DFRobotDFPlayerMini` (MP3), `Keypad`, `ArduinoJson`, `WiFiClientSecure`. Parla solo con l'API del modulo.
 
 ### 3.4 Magazzino
 
 | Dipendenza | Note |
 |---|---|
 | `picqer/php-barcode-generator` | Generazione codici a barre per gli item |
-| `spatie/laravel-medialibrary` (core) | Foto item (per versione) e documenti ordine (scontrini, fatture) |
-| `maatwebsite/excel` (core) | Report |
-| — | Scanner barcode (extra Raspberry): la pistola USB emula una tastiera, basta un input Livewire — nessuna dipendenza |
+| Storage Laravel / `spatie/laravel-medialibrary` | Foto item (per versione) e documenti ordine (scontrini, fatture) |
+| Filament (core) | Report ed export |
+| — | Scanner barcode (extra Raspberry): la pistola USB emula una tastiera, basta un input — nessuna dipendenza |
 
 ### 3.5 Assistest
 
 | Dipendenza | Note |
 |---|---|
-| `laravel/reverb` + `laravel-echo` (core) | Lobby real-time stile Kahoot, riconnessione con score |
+| `laravel/reverb` + `laravel-echo` | Lobby real-time stile Kahoot, riconnessione con score |
 | Alpine.js (core) | Timer countdown e interazioni di gioco client-side |
-| `brick/math` | **Consigliato**: confronto risposte numeriche aperte con tolleranza |
+| — | Confronto risposte numeriche con tolleranza: aritmetica PHP, valutare `brick/math` solo se serve precisione arbitraria |
 
 ### 3.6 Drive
 
 | Dipendenza | Note |
 |---|---|
-| `league/flysystem-aws-s3-v3` (core) | File su MinIO, download con URL firmati temporanei |
+| Storage locale + pipeline di upload (sezione 6) | File con download tramite URL firmati temporanei, antivirus ClamAV |
 | `setasign/fpdi` + `tecnickcom/tcpdf` | Validazione PDF e filigrana in post-upload (condiviso col modulo Filigrana) |
 | Postgres full-text (`tsvector`) | Barra di ricerca — parti da qui; `laravel/scout` + Meilisearch solo se in futuro non basta |
 | — | Versionamento "stile git": tabella `versioni`, nessun pacchetto |
@@ -149,8 +166,7 @@ Molti moduli **non richiedono nulla oltre al core**: sono CRUD + Policy + Notifi
 | Dipendenza | Note |
 |---|---|
 | `spatie/icalendar-generator` | Inviti .ics compatibili Google/Outlook |
-| `spatie/laravel-medialibrary` (core) | Allegati evento |
-| `maatwebsite/excel` (core) | Export risposte sondaggi |
+| Filament (core) | Allegati evento, export risposte sondaggi |
 
 ### 3.8 Orientamento
 
@@ -160,7 +176,7 @@ Nessuna dipendenza extra: CRUD scuole/responsabili + Notifications + generazione
 
 | Dipendenza | Note |
 |---|---|
-| `symfony/dom-crawler` (core) | Scraping orari dal sito UNIPA |
+| `symfony/dom-crawler` | Scraping orari dal sito UNIPA |
 | `spatie/browsershot` + Chromium headless | Rendering layout+palette → immagine PNG dell'orario (layout come template Blade/HTML) |
 | `spatie/icalendar-generator` | Export orario verso calendario personale |
 
@@ -171,7 +187,7 @@ Nessuna dipendenza extra: CRUD scuole/responsabili + Notifications + generazione
 | Dipendenza | Note |
 |---|---|
 | `leaflet` (npm) | Mappa posizione aula |
-| `symfony/dom-crawler` (core) | Import iniziale aule + wrapper del portale UNIPA |
+| `symfony/dom-crawler` | Import iniziale aule + wrapper del portale UNIPA |
 
 ### 3.11 QR
 
@@ -180,47 +196,47 @@ Nessuna dipendenza extra: CRUD scuole/responsabili + Notifications + generazione
 | `qr-code-styling` (npm) | Generazione client-side con colore, forma dei punti, logo interno, export SVG/PNG/JPEG — copre tutti i requisiti |
 | `endroid/qr-code` | Alternativa server-side se preferisci generare in PHP |
 
-### 3.12 Calendario
+### 3.12 Calendario (modulo non ancora creato)
 
 | Dipendenza | Note |
 |---|---|
 | `spatie/icalendar-generator` | Inviti .ics via mail |
-| Reverb/Echo (core) | Sync in tempo reale della dashboard embedded |
+| Reverb/Echo | Sync in tempo reale della dashboard embedded |
 
-**Embedded (Raspberry Pi):** nessun firmware — è un browser in modalità kiosk (Chromium `--kiosk`) che punta a una pagina Livewire aggiornata via Echo.
+**Embedded (Raspberry Pi):** nessun firmware — è un browser in modalità kiosk (Chromium `--kiosk`) che punta a una pagina aggiornata via Echo.
 
 ### 3.13 Oggetti Smarriti
 
 | Dipendenza | Note |
 |---|---|
-| `spatie/laravel-medialibrary` (core) | Foto oggetto |
+| Storage Laravel | Foto oggetto |
 | — | Integrazione Orari, copy annunci, mail mirate per corso: logica applicativa |
 | `leaflet` (npm, extra) | Mappa università se si implementa l'extra |
 
-### 3.14 Elezioni
+### 3.14 Elezioni (modulo non ancora creato)
 
 | Dipendenza | Note |
 |---|---|
-| `maatwebsite/excel` (core) | Import liste persone da verificare, export risultati |
-| — | Metodi di calcolo (D'Hondt, proporzionale...): implementali come classi PHP pure, ben testate con Pest — è il cuore del modulo, meglio non dipendere da librerie |
+| Filament (core) | Import liste persone da verificare (CSV), export risultati |
+| — | Metodi di calcolo (D'Hondt, proporzionale...): classi PHP pure, ben testate con Pest — è il cuore del modulo, meglio non dipendere da librerie |
 
 *Attenzione GDPR (dal preambolo): non memorizzare opinioni politiche — solo conteggi aggregati, mai il voto associato alla persona.*
 
-### 3.15 Filigrana
+### 3.15 Filigrana (da rifare per standardizzarla)
 
 | Dipendenza | Note |
 |---|---|
 | LibreOffice headless (`soffice --headless --convert-to pdf`) | Conversione .docx → .pdf, invocata via `Process` — nel container `app` |
 | `setasign/fpdi` + `tecnickcom/tcpdf` | Applicazione filigrana (logo o testo, opacità ≥ 5%) |
 | `ZipArchive` (nativo PHP) | Zip in caso di file multipli |
-| Alpine.js (core) | Drag and drop upload |
+| Filament (core) | Upload multiplo con drag and drop |
 
 ### 3.16 Segnalazioni
 
 | Dipendenza | Note |
 |---|---|
-| `spatie/laravel-medialibrary` (core) | Foto/video della problematica |
-| `spatie/laravel-activitylog` (core) | Changelog append-only per segnalazione |
+| Storage Laravel | Foto/video della problematica |
+| `spatie/laravel-activitylog` | Changelog append-only per segnalazione |
 | — | Rilevamento duplicati: full-text Postgres su titolo/descrizione; mail precompilate: `mailto:` generato o Blade |
 
 ---
@@ -228,25 +244,25 @@ Nessuna dipendenza extra: CRUD scuole/responsabili + Notifications + generazione
 ## 4. Riepilogo installazione
 
 ```bash
-# Core
-composer require nwidart/laravel-modules livewire/livewire filament/filament \
-  laravel/fortify laravel/sanctum laravel/reverb laravel/horizon \
-  spatie/laravel-permission spatie/laravel-medialibrary spatie/laravel-activitylog \
-  laravel-notification-channels/webpush league/flysystem-aws-s3-v3 \
-  maatwebsite/excel symfony/dom-crawler symfony/css-selector predis/predis \
-  spatie/icalendar-generator setasign/fpdi tecnickcom/tcpdf \
-  picqer/php-barcode-generator brick/money spatie/browsershot
-
-composer require --dev pestphp/pest laravel/pint larastan/larastan laravel/telescope
-
-npm install tailwindcss alpinejs laravel-echo pusher-js apexcharts leaflet qr-code-styling
+composer setup   # prima installazione completa (vedi coseUtili.md)
+composer dev     # avvio quotidiano: servizi Docker + server, code, scheduler, log, Vite
 ```
 
 ## 5. Principi da mantenere
 
 1. **Un solo `User`, schema `core`**: ogni modulo referenzia `core.users` con FK reali.
-2. **Logica di dominio in Actions/Services**: controller web (Livewire) e controller API (embedded) chiamano lo stesso codice.
-3. **Soldi sempre in centesimi interi** (`brick/money`), mai float.
-4. **Niente cancellazioni fisiche** dove i documenti chiedono storicità (prodotti Kaffettino, oggetti smarriti, ruoli istituzionali, versioni Drive): flag `delisted`/`cestinato` + timestamp.
-5. **Audit append-only**: activitylog su DB + canale Monolog dedicato su file per i requisiti "in OS", accesso solo super admin.
+2. **Logica di dominio in classi Action/Service**: le pagine Filament e i controller API (embedded) chiamano lo stesso codice.
+3. **Soldi sempre in centesimi interi**, mai float.
+4. **Niente cancellazioni fisiche** dove i documenti chiedono storicità (prodotti Kaffettino, oggetti smarriti, ruoli istituzionali, versioni Drive): flag/timestamp (`delisted_at`, `removed_at`, ...).
+5. **Audit append-only**: log su DB + canale Monolog dedicato su file per i requisiti "in OS", accesso solo super admin, conservazione 2 anni.
 6. **Ogni scraping è un job isolato e schedulato**: se fallisce, non blocca nulla e notifica gli admin.
+7. **UI standard**: ogni modulo è un panel Filament che estende `App\Providers\Filament\VivereSuitePanelProvider`.
+
+## 6. Storage dei file
+
+- **Deciso**: disco locale privato di Laravel con URL firmati temporanei, più backup. MinIO è stato tolto da `compose.yaml`: la community edition non distribuisce più immagini Docker da ottobre 2025 ed è archiviata da febbraio 2026. Se un giorno servirà uno storage S3 (più server), Garage o SeaweedFS: con Flysystem basta cambiare la configurazione. Con il disco locale non serve `league/flysystem-aws-s3-v3`.
+- **Previsto**: ogni upload passa da una pipeline unica (dettagli in CLAUDE.md):
+  - lista bianca dei formati per modulo (estensione + tipo reale);
+  - limite di dimensione e SHA-256 contro i doppioni;
+  - quarantena con antivirus **ClamAV** (servizio Docker `clamav/clamav`, client clamd scritto nella suite, nessuna libreria);
+  - riscrittura dei PDF e rimozione dei metadati EXIF/GPS dalle immagini.

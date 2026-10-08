@@ -32,11 +32,13 @@ class $CLASS$ extends ModuleServiceProvider
     protected array $providers = [
         EventServiceProvider::class,
         RouteServiceProvider::class,
+        // Interfaccia del modulo: aggiungere qui il PanelProvider Filament del modulo
+        // (vedi CLAUDE.md, "Creare un nuovo modulo")
     ];
 
     /**
      * Define module schedules.
-     * 
+     *
      * @param $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void

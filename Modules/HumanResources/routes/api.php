@@ -1,8 +1,9 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Modules\HumanResources\Http\Controllers\HumanResourcesController;
-
-Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
-    Route::apiResource('humanresources', HumanResourcesController::class)->names('humanresources');
-});
+/*
+| API del modulo (prefisso /api, middleware "api").
+|
+| Da definire quando il modulo verrà sviluppato. Sanctum non fa parte della suite:
+| i dispositivi embedded si autenticano con un token di dispositivo verificato da un
+| middleware dedicato (vedi CLAUDE.md, sezione "API per dispositivi embedded").
+*/

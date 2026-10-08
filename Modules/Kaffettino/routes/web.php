@@ -1,15 +1,9 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Modules\Kaffettino\Http\Controllers\KaffettinoController;
-
-/* Per renderle solo in auth allora usare il middleware, tipo
-Route::middleware(['auth', 'verified'])->group(function () {
-    Route::resource('kaffettino', KaffettinoController::class)->names('kaffettino');
-});
+/*
+| Rotte web del modulo.
+|
+| L'interfaccia del modulo è un panel Filament (vedi app/Providers/Filament), che registra
+| da solo le proprie rotte. Qui vanno solo eventuali rotte extra fuori dal panel
+| (es. link firmati inviati via mail).
 */
-
-Route::middleware(['web'])->group(function () {
-    Route::resource('kaffettino', KaffettinoController::class)->names('kaffettino');
-});
-

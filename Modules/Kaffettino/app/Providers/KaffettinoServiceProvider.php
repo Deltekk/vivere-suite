@@ -2,8 +2,9 @@
 
 namespace Modules\Kaffettino\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Kaffettino\Providers\Filament\KaffettinoPanelProvider;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class KaffettinoServiceProvider extends ModuleServiceProvider
 {
@@ -32,12 +33,14 @@ class KaffettinoServiceProvider extends ModuleServiceProvider
     protected array $providers = [
         EventServiceProvider::class,
         RouteServiceProvider::class,
+        // Interfaccia del modulo (panel Filament basato su VivereSuitePanelProvider)
+        KaffettinoPanelProvider::class,
     ];
 
     /**
      * Define module schedules.
-     * 
-     * @param $schedule
+     *
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

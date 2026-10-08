@@ -2,8 +2,8 @@
 
 namespace Modules\Filigrana\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
 class FiligranaServiceProvider extends ModuleServiceProvider
 {
@@ -36,8 +36,8 @@ class FiligranaServiceProvider extends ModuleServiceProvider
 
     /**
      * Define module schedules.
-     * 
-     * @param $schedule
+     *
+     * @param  $schedule
      */
     // protected function configureSchedules(Schedule $schedule): void
     // {

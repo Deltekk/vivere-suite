@@ -1,7 +1,5 @@
 <?php
 
-test('returns a successful response', function () {
-    $response = $this->get('/');
-
-    $response->assertOk();
+test('la home rimanda alla piattaforma HR', function () {
+    $this->get('/')->assertRedirect('/hr');
 });
