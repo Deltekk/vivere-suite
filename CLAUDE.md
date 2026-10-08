@@ -217,10 +217,26 @@ Fatto:
 - test Pest su schema, relazioni, vincoli e accesso ai panel.
 
 HR, cosa manca:
-1. **scraper dei professori**: manca una fonte (vedi `NoProfessorSource`); per ora si usa `php artisan hr:import-professors <file>`;
-2. **allegati delle notifiche** (`core.notification_attachments`): aspettano la pipeline di upload con antivirus;
-3. far **accettare l'informativa** al primo accesso agli utenti inseriti dallo staff, e a tutti quando cambia `VIVERE_TERMS_VERSION`;
-4. link definitivi a **informativa privacy** (`VIVERE_PRIVACY_POLICY_URL`) e **pagina suggerimenti** (`VIVERE_SUGGESTIONS_URL`);
+1. **scraper dei professori** (D12).
+   - **Oggi:** la fonte è `NoProfessorSource`, che non restituisce nomi. La pagina `www.unipa.it/persone/docenti/` non contiene l'elenco nell'HTML (probabilmente lo carica via JavaScript o tramite una ricerca), quindi non c'è ancora una fonte da cui leggere.
+   - **Nel frattempo:** l'elenco si carica da file, un nome per riga, con `php artisan hr:import-professors file.txt`.
+   - **Da fare:**
+     - trovare con l'associazione una pagina pubblica o un export (anche periodico) con l'elenco dei docenti;
+     - scrivere una classe che implementa `Modules\HumanResources\Contracts\ProfessorSource` e collegarla in `HumanResourcesServiceProvider::register()`.
+   - **Come deve comportarsi:**
+     - se la pagina cambia formato deve lanciare un'eccezione, non restituire un elenco vuoto;
+     - il job settimanale `hr:sync-professors` è già pronto: è isolato, scrive nel log e avvisa i super admin se fallisce;
+     - `symfony/dom-crawler` si installa solo in quel momento.
+2. **allegati delle notifiche** (`core.notification_attachments`): si aggiungono insieme alla pipeline di caricamento file con antivirus (vedi "Decisioni ancora aperte"), sia nell'invio broadcast (`SendNotification`) sia nelle notifiche dei moduli.
+3. **accettazione dell'informativa privacy**.
+   - **Utenti inseriti dallo staff:** oggi non la accettano mai. `CreateUser` imposta `privacy_accepted_at` a nome loro, ed è un TODO nel codice.
+   - **Tutti gli utenti:** quando cambia `VIVERE_TERMS_VERSION` va chiesto di accettare la nuova versione.
+   - **Da fare:** un passo in più in `EnsureAccountIsReady`: se `terms_version` è diversa da `config('vivere.terms_version')`, si va a una pagina HR "Accetta l'informativa", che aggiorna `privacy_accepted_at` e `terms_version`. Gli utenti inseriti dallo staff vanno creati con `terms_version` vuota o "da accettare", così il passo scatta al primo accesso.
+4. **link mancanti**: servono gli indirizzi definitivi di
+   - **informativa privacy** (`VIVERE_PRIVACY_POLICY_URL`), linkata nella registrazione;
+   - **pagina dei suggerimenti** (`VIVERE_SUGGESTIONS_URL`), linkata nel menu utente di ogni piattaforma.
+
+   Finché sono vuoti, il link all'informativa resta testo semplice e la voce "Suggerimenti" non compare.
 5. extra del documento: pubblicare i rappresentanti (CCS) per il sito web;
 6. **controllo del codice fiscale** (`core.staff_profiles.tax_code`).
    - **Oggi:** si controllano solo i 16 caratteri. In `CompleteStaffProfile` anche che siano alfanumerici (`/^[A-Za-z0-9]{16}$/`), in `UserResource` neanche quello. Si salva in maiuscolo.
@@ -231,6 +247,19 @@ HR, cosa manca:
      - **carattere di controllo:** calcolato con le tabelle ufficiali dei caratteri in posizione pari e dispari; è il controllo che intercetta la maggior parte degli errori di battitura.
    - **Coerenza con i dati dell'utente:** come **avviso** per gli admin, non come errore, perché omocodie e casi particolari non vanno bloccati. Controllare che data di nascita, cognome e nome corrispondano a `birthday`, `surname` e `name`. Il sesso del codice (giorno +40) non va confrontato con `gender`: è facoltativo e ha anche il valore "Altro".
    - **Test:** codici validi, carattere di controllo sbagliato, omocodia, nati all'estero, mese non valido.
+7. **immagine del profilo** (foto o avatar dell'utente), facoltativa (GDPR: dato inserito volontariamente).
+   - **Dati:** colonna `core.users.avatar_path` (text, null), da aggiungere con una nuova migration e nel DBML.
+   - **Caricamento:** dal profilo (`EditProfile`) con il `FileUpload` di Filament (`->avatar()->image()->imageEditor()` per ritagliare). Formati JPG, PNG e WebP, al massimo 2 MB, ridimensionata (es. 512×512). Passa dalla pipeline di upload: antivirus, ricodifica dell'immagine che toglie i metadati EXIF/GPS.
+   - **Dove sta:** disco locale privato, servita solo agli utenti loggati (URL firmato temporaneo o rotta autenticata), mai pubblica.
+   - **Filament:** `User` implementa `Filament\Models\Contracts\HasAvatar` (`getFilamentAvatarUrl()`): così compare nel menu utente, nelle tabelle e nelle notifiche.
+   - **Gestione:**
+     - l'utente può toglierla quando vuole;
+     - gli admin possono rimuovere un'immagine inappropriata (registrato nell'audit; per i casi gravi c'è il ban);
+     - `AnonymizeUser` deve cancellare anche il file.
+   - **Test:** caricamento, formato rifiutato, rimozione, cancellazione all'anonimizzazione, visibilità solo agli utenti loggati.
+8. **avatar di default senza servizi esterni (GDPR, da sistemare presto).** Oggi Filament usa `UiAvatarsProvider`, che genera l'avatar con le iniziali chiamando `https://ui-avatars.com/api/?name=Nome+Cognome`. Quindi, a ogni pagina, il browser invia nome, cognome e indirizzo IP dell'utente a un servizio esterno, senza consenso.
+   - **Da fare:** un provider locale (es. `App\Filament\AvatarProviders\InitialsAvatarProvider`), che genera un SVG con le iniziali e i colori della palette come data URI, senza librerie. Va impostato in `VivereSuitePanelProvider` con `->defaultAvatarProvider(...)` e vale anche quando l'utente non ha caricato un'immagine (punto 7).
+   - **Da valutare insieme:** anche il font di Filament viene caricato da un servizio esterno (`fonts.bunny.net`, che dichiara di non registrare gli IP). Per non avere richieste a terzi si può ospitare il font in locale (`->font(..., provider: LocalFontProvider::class)` con i file in `public/`).
 
 Prossimi passi Kaffettino (in ordine indicativo):
 1. azioni di dominio, scritte una volta e usate sia da Filament sia dall'API:
